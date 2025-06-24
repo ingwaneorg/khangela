@@ -33,7 +33,8 @@ class CurriculumSearchEngine:
         self.df = None
         self.embeddings = None
         self.embeddings_path = Path("models/embeddings.pkl")
-        
+        self.level_filter = None  # level filtering
+
     def load_data(self) -> None:
         """Load curriculum data from CSV file."""
         try:
@@ -61,6 +62,10 @@ class CurriculumSearchEngine:
             
         return searchable_texts
         
+    def set_level_filter(self, level: int) -> None:
+        """Set level filter for all searches."""
+        self.level_filter = level
+
     def generate_embeddings(self, force_rebuild: bool = False) -> None:
         """Generate or load embeddings for the curriculum content."""
         
@@ -85,7 +90,7 @@ class CurriculumSearchEngine:
             pickle.dump(self.embeddings, f)
         print("✅ Embeddings generated and cached")
         
-    def search(self, query: str, top_k: int = 5, min_confidence: float = 0.3) -> List[Tuple[Dict, float]]:
+    def search(self, query: str, top_k: int=5, min_confidence: float=0.3) -> List[Tuple[Dict, float]]:
         """
         Search for curriculum content using semantic similarity.
         
@@ -116,6 +121,10 @@ class CurriculumSearchEngine:
                 result_dict = self.df.iloc[idx].to_dict()
                 results.append((result_dict, confidence))
                 
+        # Apply level filter if set
+        if self.level_filter:
+            results = [(r, c) for r, c in results if r['Level'] == self.level_filter]
+
         return results
         
     def format_result(self, result: Dict, confidence: float, detailed: bool = False) -> str:
@@ -124,7 +133,7 @@ class CurriculumSearchEngine:
         
         # Header with confidence
         confidence_emoji = "🎯" if confidence > 0.8 else "📍" if confidence > 0.6 else "🔍"
-        output.append(f"{confidence_emoji} Confidence: {confidence:.2f}")
+        output.append(f"{confidence_emoji} {confidence:.2f}")
         output.append("")
         
         # Location information
@@ -142,7 +151,7 @@ class CurriculumSearchEngine:
         if detailed:
             output.append(f"📝 Content: {result['Content_Description']}")
             output.append("")
-            output.append(f"🏷️  Keywords: {result['Keywords']}")
+            output.append(f"🏷️ Keywords: {result['Keywords']}")
             output.append("")
             
             if pd.notna(result.get('Prerequisites')):
@@ -150,7 +159,7 @@ class CurriculumSearchEngine:
                 output.append("")
                 
             if pd.notna(result.get('Duration_Hours')):
-                output.append(f"⏱️  Duration: {result['Duration_Hours']} hours")
+                output.append(f"⏱️ Duration: {result['Duration_Hours']} hours")
                 output.append("")
         
         return "\n".join(output)
@@ -158,6 +167,8 @@ class CurriculumSearchEngine:
     def interactive_search(self) -> None:
         """Run interactive search session."""
         print("\n🎓 Curriculum Search Tool")
+        if self.level_filter:
+            print(f"🎯 Filtering results for Level {self.level_filter} only")
         print("=" * 50)
         print("Enter your search queries (type 'quit' to exit)")
         print("Add --detailed for more information")
@@ -193,8 +204,7 @@ class CurriculumSearchEngine:
                 print("-" * 40)
                 
                 for i, (result, confidence) in enumerate(results, 1):
-                    print(f"\n[Result {i}]")
-                    print(self.format_result(result, confidence, detailed))
+                    print(f"\n[Result {i}] {self.format_result(result, confidence, detailed)}")
                     
                 print("=" * 50)
                 
@@ -228,6 +238,10 @@ def main():
         search_engine.load_model()
         search_engine.generate_embeddings(force_rebuild=args.rebuild_embeddings)
         
+        # Set level filter if specified
+        if args.level:
+            search_engine.set_level_filter(args.level)
+
         # Interactive mode
         if args.interactive or not args.query:
             search_engine.interactive_search()
@@ -248,8 +262,7 @@ def main():
         print("-" * 40)
         
         for i, (result, confidence) in enumerate(results, 1):
-            print(f"\n[Result {i}]")
-            print(search_engine.format_result(result, confidence, args.detailed))
+            print(f"\n[Result {i}] {search_engine.format_result(result, confidence, args.detailed)}")
             
     except Exception as e:
         print(f"❌ Error: {e}")
